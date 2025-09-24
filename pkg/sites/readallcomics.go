@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	// "github.com/Girbons/comics-downloader/internal/logger"
 	"github.com/Girbons/comics-downloader/pkg/config"
 	"github.com/Girbons/comics-downloader/pkg/core"
 	"github.com/Girbons/comics-downloader/pkg/util"
@@ -53,34 +54,78 @@ func (r *Readallcomics) retrieveImageLinks(comic *core.Comic) ([]string, error) 
 func (r *Readallcomics) getIssues(url string) ([]string, error) {
 	var links []string
 
+	// Fetch the HTML content
 	response, err := soup.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch URL %s: %v", url, err)
 	}
 
+	// Parse the HTML
 	doc := soup.HTMLParse(response)
+	r.options.Logger.Debug(response)
+	if doc.Error != nil {
+		return nil, fmt.Errorf("failed to parse HTML from %s: %v", url, doc.Error)
+	}
+	// if doc.Root == nil {
+	// 	return nil, fmt.Errorf("no HTML content found in %s", url)
+	// }
 
+	// Handle category page (list of comics)
 	if strings.Contains(url, "category") {
-		chapters := doc.Find("ul", "class", "list-story").FindAll("a")
-		for _, chapter := range chapters {
-			issueUrl := chapter.Attrs()["href"]
-			if util.IsURLValid(issueUrl) {
-				links = append(links, issueUrl)
-			}
+		listStory := doc.Find("ul", "class", "list-story")
+		if listStory.Error != nil {
+			return nil, fmt.Errorf("failed to find 'ul.list-story' in %s: %v", url, listStory.Error)
+		}
+		if listStory.Pointer == nil {
+			return nil, fmt.Errorf("no 'ul.list-story' element found in %s", url)
+		}
 
+		chapters := listStory.FindAll("a")
+		if len(chapters) == 0 {
+			return nil, fmt.Errorf("no issue links found in 'ul.list-story' for %s", url)
+		}
+
+		for _, chapter := range chapters {
+			if chapter.Error != nil {
+				r.options.Logger.Warning(fmt.Sprintf("skipping invalid chapter link: %v", chapter.Error))
+				continue
+			}
+			attrs := chapter.Attrs()
+			if href, exists := attrs["href"]; exists && util.IsURLValid(href) {
+				links = append(links, href)
+			}
 		}
 	} else {
-		chapters := doc.Find("select", "id", "selectbox").FindAll("option")
+		// Handle individual issue page (dropdown select box)
+		selectBox := doc.Find("select", "id", "selectbox")
+		if selectBox.Error != nil {
+			return nil, fmt.Errorf("failed to find 'select#selectbox' in %s: %v", url, selectBox.Error)
+		}
+		if selectBox.Pointer == nil {
+			return nil, fmt.Errorf("no 'select#selectbox' element found in %s", url)
+		}
+
+		chapters := selectBox.FindAll("option")
+		if len(chapters) == 0 {
+			return nil, fmt.Errorf("no issue options found in 'select#selectbox' for %s", url)
+		}
+
 		for _, chapter := range chapters {
-			issueUrl := chapter.Attrs()["value"]
-			if util.IsURLValid(issueUrl) {
-				links = append(links, issueUrl)
+			if chapter.Error != nil {
+				r.options.Logger.Warning(fmt.Sprintf("skipping invalid chapter option: %v", chapter.Error))
+				continue
+			}
+			attrs := chapter.Attrs()
+			if value, exists := attrs["value"]; exists && util.IsURLValid(value) {
+				links = append(links, value)
 			}
 		}
 	}
 
-	if r.options.Debug {
-		r.options.Logger.Debug(fmt.Sprintf("Image Links found: %s", strings.Join(links, " ")))
+	if r.options.Debug && len(links) > 0 {
+		r.options.Logger.Debug(fmt.Sprintf("Issue links found: %s", strings.Join(links, ", ")))
+	} else if len(links) == 0 {
+		return nil, fmt.Errorf("no valid issue links found in %s", url)
 	}
 
 	return links, nil

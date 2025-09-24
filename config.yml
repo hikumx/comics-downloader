@@ -1,0 +1,24 @@
+# Comics Downloader Configuration File
+global:
+  format: "cbz"
+  scope: "last"
+
+# Comics watchlist
+comics:
+  - name: "One Piece"
+    url: "https://mangakakalot.com/manga/one-piece"
+    scope: "last"                     # Options: last, all, range (e.g., "1-10")
+    output: "comics/manga/one-piece"
+    images_format: "jpg"              # Options: jpg, png, jpeg, img
+    format: "cbz"                     # Options: pdf, epub, cbr, cbz
+    custom_comic_name: ""
+    force_aspect: false
+    
+  - name: "Batman"
+    url: "https://readcomiconline.li/Comic/Batman"
+    scope: "range:50-60"
+    output: "comics/dc/batman"
+    images_format: "png"
+    format: "pdf"
+    custom_comic_name: "Batman - Rebirth"
+    force_aspect: true
